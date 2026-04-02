@@ -36,7 +36,7 @@ jobs:
           MSVC_PATH="$VISUAL_STUDIO_PATH/VC/Tools/MSVC/$(ls "$VISUAL_STUDIO_PATH/VC/Tools/MSVC" | sort -V | tail -1)"
 
           # Make the `import std` interface manifest
-          read -r -d '' MANIFEST_JSON <<'EOF'
+          MANIFEST_JSON=$(cat <<EOF
           {
             "version": 1,
             "revision": 1,
@@ -48,6 +48,7 @@ jobs:
             }
           }
           EOF
+          )
           # World record backslashes
           MANIFEST_JSON=$(sed "s#SOURCE_PATH#$(cygpath -w "$MSVC_PATH/modules/std.ixx" | sed 's \\ \\\\\\\\\\\\\\\\ g')#")
           # This wants a Unix path but the other wants a Windows path
@@ -57,18 +58,18 @@ jobs:
           # Patch cmake
           patch --batch --unified /c/msys64/mingw64/share/cmake/Modules/Compiler/Clang-CXX-CXXImportStd.cmake <<"EOF"
           @@ -4,10 +4,8 @@
-            elseif (CMAKE_CXX_STANDARD_LIBRARY STREQUAL "libstdc++")
-              set(_clang_modules_json_impl "libstdc++")
-            else ()
+             elseif (CMAKE_CXX_STANDARD_LIBRARY STREQUAL "libstdc++")
+               set(_clang_modules_json_impl "libstdc++")
+             else ()
           -    set("${variable}"
           -      "set(CMAKE_CXX${std}_COMPILER_IMPORT_STD_NOT_FOUND_MESSAGE \"Only `libc++` and `libstdc++` are supported\")\n"
           -      PARENT_SCOPE)
           -    return ()
           +    set(_clang_modules_json_impl "libc++")
           +    set(CMAKE_CXX_STDLIB_MODULES_JSON ms-stl.modules.json)
-            endif ()
+             endif ()
 
-            if (CMAKE_CXX_STDLIB_MODULES_JSON)
+             if (CMAKE_CXX_STDLIB_MODULES_JSON)
           EOF
           echo ::endgroup::
 
