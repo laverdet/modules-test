@@ -20,9 +20,9 @@ jobs:
           # You want the mingw version of ninja, not the msys version. The msys version uses
           # `CMD.EXE` and does not work with the cmake Ninja generator.
           ARCH=x86_64
-          /c/msys64/usr/bin/pacman -S --noconfirm \
+          /c/msys64/usr/bin/pacman -Sy --noconfirm \
             mingw-w64-$ARCH-boost \
-            mingw64/mingw-w64-$ARCH-cmake \
+            "mingw64/mingw-w64-$ARCH-cmake>=4.3.0" \
             mingw64/mingw-w64-$ARCH-ninja \
           ;
           echo "/c/msys64/mingw64/bin" >> "$GITHUB_PATH"
@@ -36,32 +36,10 @@ jobs:
           MSVC_PATH="$VISUAL_STUDIO_PATH/VC/Tools/MSVC/$(ls "$VISUAL_STUDIO_PATH/VC/Tools/MSVC" | sort -V | tail -1)"
 
           # Make the `import std` interface manifest
-          MANIFEST_JSON=$(cat <<'EOF'
-          {
-            "version": 1,
-            "revision": 1,
-            "modules": [
-              { "logical-name": "std", "source-path": "SOURCE_PATH", "is-std-library": true }
-            ],
-            "local-arguments": {
-              "system-include-directories": [ "INCLUDE_PATH" ]
-            }
-          }
-          EOF
-          )
-          # World record backslashes
-          MANIFEST_JSON=$(echo "$MANIFEST_JSON" | sed "s#SOURCE_PATH#$(cygpath -w "$MSVC_PATH/modules/std.ixx" | sed 's \\ \\\\\\\\\\\\\\\\ g')#")
-          # This wants a Unix path but the other wants a Windows path
-          MANIFEST_JSON=$(echo "$MANIFEST_JSON" | sed "s#INCLUDE_PATH#$MSVC_PATH/modules#")
-          echo "$MANIFEST_JSON" | tee ms-stl.modules.json
-
-          # Patch cmake
-          cat <<'EOF' > /c/msys64/mingw64/share/cmake/Modules/Compiler/Clang-CXX-CXXImportStd.cmake
-          function (_cmake_cxx_find_modules_json)
-            set(_clang_modules_json_impl "libc++")
-            set(CMAKE_CXX_STDLIB_MODULES_JSON ms-stl.modules.json)
-          endfunction ()
-          EOF
+          MODULES_FRAGMENT='{ "logical-name": "std", "source-path": "'"$(cygpath -w "$MSVC_PATH/modules/std.ixx" | sed 's \\ \\\\\\\\ g')"'", "is-std-library": true }'
+          ARGUMENTS_FRAGMENT='"local-arguments": { "system-include-directories": [ "'"$MSVC_PATH/modules"'" ] }'
+          MANIFEST_JSON='{ "version": 1, "revision": 1, "modules": [ '"$MODULES_FRAGMENT"' ], '"$ARGUMENTS_FRAGMENT"' }'
+          echo "$MANIFEST_JSON" > ms-stl.modules.json
           echo ::endgroup::
 
       - name: Configure
