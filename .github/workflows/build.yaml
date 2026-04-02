@@ -25,13 +25,51 @@ jobs:
             mingw64/mingw-w64-$ARCH-cmake \
             mingw64/mingw-w64-$ARCH-ninja \
           ;
-
-
-          cat /c/msys64/mingw64/share/cmake/Modules/Compiler/Clang-CXX-CXXImportStd.cmake
-
-
           echo "/c/msys64/mingw64/bin" >> "$GITHUB_PATH"
           echo "/c/msys64/usr/bin" >> "$GITHUB_PATH"
+          echo ::endgroup::
+
+          echo ::group::import std hack
+          # /c/Program Files/Microsoft Visual Studio/2022/Enterprise
+          VISUAL_STUDIO_PATH=$(cygpath "$(vswhere | grep installationPath: | cut -c19-)")
+          # /c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207
+          MSVC_PATH="$VISUAL_STUDIO_PATH/VC/Tools/MSVC/$(ls "$VISUAL_STUDIO_PATH/VC/Tools/MSVC" | sort -V | tail -1)"
+
+          # Make the `import std` interface manifest
+          read -r -d '' MANIFEST_JSON <<'EOF'
+          {
+            "version": 1,
+            "revision": 1,
+            "modules": [
+              { "logical-name": "std", "source-path": "SOURCE_PATH", "is-std-library": true }
+            ],
+            "local-arguments": {
+              "system-include-directories": [ "INCLUDE_PATH" ]
+            }
+          }
+          EOF
+          # World record backslashes
+          MANIFEST_JSON=$(sed "s#SOURCE_PATH#$(cygpath -w "$MSVC_PATH/modules/std.ixx" | sed 's \\ \\\\\\\\\\\\\\\\ g')#")
+          # This wants a Unix path but the other wants a Windows path
+          MANIFEST_JSON=$(sed "s#INCLUDE_PATH#$MSVC_PATH/modules#")
+          echo "$MANIFEST_JSON" | tee ms-stl.modules.json
+
+          # Patch cmake
+          patch --batch --unified /c/msys64/mingw64/share/cmake/Modules/Compiler/Clang-CXX-CXXImportStd.cmake <<"EOF"
+          @@ -4,10 +4,8 @@
+            elseif (CMAKE_CXX_STANDARD_LIBRARY STREQUAL "libstdc++")
+              set(_clang_modules_json_impl "libstdc++")
+            else ()
+          -    set("${variable}"
+          -      "set(CMAKE_CXX${std}_COMPILER_IMPORT_STD_NOT_FOUND_MESSAGE \"Only `libc++` and `libstdc++` are supported\")\n"
+          -      PARENT_SCOPE)
+          -    return ()
+          +    set(_clang_modules_json_impl "libc++")
+          +    set(CMAKE_CXX_STDLIB_MODULES_JSON ms-stl.modules.json)
+            endif ()
+
+            if (CMAKE_CXX_STDLIB_MODULES_JSON)
+          EOF
           echo ::endgroup::
 
       - name: Configure
@@ -58,3 +96,6 @@ jobs:
       - name: Test
         shell: sh
         run: build/foo.exe
+
+      - uses: laverdet/console@v1
+        if: failure()
