@@ -40,6 +40,23 @@ jobs:
           ARGUMENTS_FRAGMENT='"local-arguments": { "system-include-directories": [ "'"$MSVC_PATH/modules"'" ] }'
           MANIFEST_JSON='{ "version": 1, "revision": 1, "modules": [ '"$MODULES_FRAGMENT"' ], '"$ARGUMENTS_FRAGMENT"' }'
           echo "$MANIFEST_JSON" > ms-stl.modules.json
+
+          # Patch cmake
+          patch --batch --forward --unified /c/msys64/mingw64/share/cmake/Modules/Compiler/Clang-CXX-CXXImportStd.cmake <<"EOF"
+          --- a   2026-04-02 23:44:36.965900400 +0000
+          +++ b   2026-04-02 23:45:24.502124700 +0000
+          @@ -4,8 +4,8 @@
+             elseif (CMAKE_CXX_STANDARD_LIBRARY STREQUAL "libstdc++")
+               set(_clang_modules_json_impl "libstdc++")
+             else ()
+          -    set(CMAKE_CXX_COMPILER_IMPORT_STD_ERROR_MESSAGE "Only `libc++` and `libstdc++` are supported" PARENT_SCOPE)
+          -    return ()
+          +    set(_clang_modules_json_impl "libc++")
+          +    set(CMAKE_CXX_STDLIB_MODULES_JSON ms-stl.modules.json PARENT_SCOPE)
+             endif ()
+
+             if (NOT CMAKE_CXX_STDLIB_MODULES_JSON)
+          EOF
           echo ::endgroup::
 
       - name: Configure
